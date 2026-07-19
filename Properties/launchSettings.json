@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "SoundPort (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "SoundPort (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

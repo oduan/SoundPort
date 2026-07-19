@@ -1,0 +1,10 @@
+.vs/
+.agents/
+.template-hive/
+bin/
+obj/
+AppPackages/
+BundleArtifacts/
+Generated Files/
+*.user
+*.suo
