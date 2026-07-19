@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: windows-2025-vs2026
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Set package version
+        shell: pwsh
+        run: ./scripts/Set-PackageVersion.ps1 -Tag "${{ github.ref_name }}"
+
+      - name: Restore signing certificate
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64)) {
+            throw "Repository secret WINDOWS_CERTIFICATE_BASE64 is not configured."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
+            throw "Repository secret WINDOWS_CERTIFICATE_PASSWORD is not configured."
+          }
+
+          $certificatePath = Join-Path $env:RUNNER_TEMP "SoundPort-signing.pfx"
+          [IO.File]::WriteAllBytes(
+            $certificatePath,
+            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
+
+          $securePassword = ConvertTo-SecureString `
+            $env:WINDOWS_CERTIFICATE_PASSWORD `
+            -AsPlainText `
+            -Force
+          $certificate = Import-PfxCertificate `
+            -FilePath $certificatePath `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -Password $securePassword
+          if ($certificate.Subject -ne "CN=SoundPort Open Source") {
+            throw "The signing certificate subject does not match the package publisher."
+          }
+
+          "SOUNDPORT_CERTIFICATE_PATH=$certificatePath" >> $env:GITHUB_ENV
+          "SOUNDPORT_CERTIFICATE_THUMBPRINT=$($certificate.Thumbprint)" >> $env:GITHUB_ENV
+
+      - name: Build signed MSIX
+        shell: pwsh
+        run: |
+          dotnet build SoundPort.csproj `
+            --configuration Release `
+            -p:Platform=x64 `
+            -p:RuntimeIdentifier=win-x64 `
+            -p:GenerateAppxPackageOnBuild=true `
+            -p:AppxBundle=Never `
+            -p:UapAppxPackageBuildMode=SideloadOnly `
+            -p:AppxPackageDir="$env:GITHUB_WORKSPACE\artifacts\" `
+            -p:AppxPackageSigningEnabled=true `
+            -p:PackageCertificateThumbprint="$env:SOUNDPORT_CERTIFICATE_THUMBPRINT"
+
+      - name: Prepare release bundle
+        shell: pwsh
+        run: |
+          $msix = Get-ChildItem artifacts -Recurse -Filter "SoundPort_*.msix" |
+            Select-Object -First 1
+          if ($null -eq $msix) {
+            throw "The MSIX package was not generated."
+          }
+
+          $bundle = Join-Path $env:RUNNER_TEMP "SoundPort-${{ github.ref_name }}"
+          New-Item -ItemType Directory -Path $bundle | Out-Null
+          Copy-Item $msix.FullName (Join-Path $bundle "SoundPort-${{ github.ref_name }}-x64.msix")
+          Copy-Item Assets/SoundPort.cer $bundle
+          Copy-Item scripts/Install-SoundPort.ps1 $bundle
+          Copy-Item docs/INSTALL.md $bundle
+
+          $sourceDependencies = Join-Path $msix.Directory.FullName "Dependencies\x64"
+          if (Test-Path -LiteralPath $sourceDependencies) {
+            $bundleDependencies = Join-Path $bundle "Dependencies"
+            New-Item -ItemType Directory -Path $bundleDependencies | Out-Null
+            Get-ChildItem $sourceDependencies -Filter *.msix |
+              Copy-Item -Destination $bundleDependencies
+          }
+
+          Compress-Archive `
+            -Path (Join-Path $bundle "*") `
+            -DestinationPath "artifacts/SoundPort-${{ github.ref_name }}-x64.zip"
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $msix = Get-ChildItem artifacts -Recurse -Filter "SoundPort_*.msix" |
+            Select-Object -First 1
+          gh release create "${{ github.ref_name }}" `
+            "artifacts/SoundPort-${{ github.ref_name }}-x64.zip" `
+            "$($msix.FullName)" `
+            "Assets/SoundPort.cer" `
+            --repo "${{ github.repository }}" `
+            --title "SoundPort ${{ github.ref_name }}" `
+            --generate-notes `
+            --verify-tag
+
+      - name: Remove signing certificate
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path $env:SOUNDPORT_CERTIFICATE_PATH) {
+            Remove-Item -LiteralPath $env:SOUNDPORT_CERTIFICATE_PATH -Force
+          }
+          if (-not [string]::IsNullOrWhiteSpace(
+              $env:SOUNDPORT_CERTIFICATE_THUMBPRINT)) {
+            $certificateStorePath = "Cert:\CurrentUser\My\$env:SOUNDPORT_CERTIFICATE_THUMBPRINT"
+            if (Test-Path $certificateStorePath) {
+              Remove-Item -LiteralPath $certificateStorePath -Force
+            }
+          }

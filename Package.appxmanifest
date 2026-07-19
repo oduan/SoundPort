@@ -9,14 +9,14 @@
 
   <Identity
     Name="08BCBD0D-9A71-4EF7-81C1-DBE3DE79A631"
-    Publisher="CN=AppPublisher"
+    Publisher="CN=SoundPort Open Source"
     Version="1.0.0.0" />
 
   <mp:PhoneIdentity PhoneProductId="08BCBD0D-9A71-4EF7-81C1-DBE3DE79A631" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
     <DisplayName>SoundPort</DisplayName>
-    <PublisherDisplayName>AppPublisher</PublisherDisplayName>
+    <PublisherDisplayName>SoundPort contributors</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
