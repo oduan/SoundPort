@@ -1,0 +1,66 @@
+name: 缺陷或兼容性问题
+description: 报告可复现的程序缺陷或蓝牙设备兼容性问题
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请删除蓝牙设备地址、用户名和其他敏感数据。
+  - type: input
+    id: windows
+    attributes:
+      label: Windows 版本
+      description: 请包含系统内部版本，例如 Windows 11 24H2 / 26100.x。
+    validations:
+      required: true
+  - type: input
+    id: bluetooth
+    attributes:
+      label: 蓝牙适配器与驱动
+      description: 适配器型号及驱动版本。
+    validations:
+      required: true
+  - type: input
+    id: phone
+    attributes:
+      label: 手机与 Android 版本
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 配对……
+        2. 选择……
+        3. 点击……
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: 其他信息
+      description: 可提供已脱敏的错误信息、截图或日志。
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已搜索现有 Issue。
+          required: true
+        - label: 我已删除设备地址、个人信息和其他敏感数据。
+          required: true
