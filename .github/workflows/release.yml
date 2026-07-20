@@ -54,6 +54,10 @@ jobs:
           if ($certificate.Subject -ne "CN=SoundPort Open Source") {
             throw "The signing certificate subject does not match the package publisher."
           }
+          $publicCertificate = Get-PfxCertificate "Assets/SoundPort.cer"
+          if ($publicCertificate.Thumbprint -ne $certificate.Thumbprint) {
+            throw "Assets/SoundPort.cer does not match the signing certificate."
+          }
 
           "SOUNDPORT_CERTIFICATE_PATH=$certificatePath" >> $env:GITHUB_ENV
           "SOUNDPORT_CERTIFICATE_THUMBPRINT=$($certificate.Thumbprint)" >> $env:GITHUB_ENV
@@ -100,6 +104,53 @@ jobs:
             -Path (Join-Path $bundle "*") `
             -DestinationPath "artifacts/SoundPort-${{ github.ref_name }}-x64.zip"
 
+          "SOUNDPORT_BUNDLE_DIR=$bundle" >> $env:GITHUB_ENV
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress --yes
+
+      - name: Build single-file installer
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            throw "Inno Setup compiler was not found."
+          }
+
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          & $iscc `
+            "/DMyAppVersion=$version" `
+            "/DReleaseTag=${{ github.ref_name }}" `
+            "/DPayloadDir=$env:SOUNDPORT_BUNDLE_DIR" `
+            "/DOutputDir=$env:GITHUB_WORKSPACE\artifacts" `
+            "installer\SoundPort.iss"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup failed with exit code $LASTEXITCODE."
+          }
+
+          $setup = Get-ChildItem artifacts -Filter "SoundPort-*-x64-Setup.exe" |
+            Select-Object -First 1
+          if ($null -eq $setup) {
+            throw "The single-file installer was not generated."
+          }
+
+          $signTool = Get-ChildItem `
+            "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if ($null -eq $signTool) {
+            throw "signtool.exe was not found."
+          }
+
+          & $signTool.FullName sign `
+            /sha1 "$env:SOUNDPORT_CERTIFICATE_THUMBPRINT" `
+            /fd SHA256 `
+            $setup.FullName
+          if ($LASTEXITCODE -ne 0) {
+            throw "Signing the installer failed with exit code $LASTEXITCODE."
+          }
+
       - name: Create GitHub Release
         shell: pwsh
         env:
@@ -109,6 +160,7 @@ jobs:
             Select-Object -First 1
           gh release create "${{ github.ref_name }}" `
             "artifacts/SoundPort-${{ github.ref_name }}-x64.zip" `
+            "artifacts/SoundPort-${{ github.ref_name }}-x64-Setup.exe" `
             "$($msix.FullName)" `
             "Assets/SoundPort.cer" `
             --repo "${{ github.repository }}" `

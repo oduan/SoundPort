@@ -92,8 +92,10 @@ dotnet run --project SoundPort.csproj --property:Platform=x64
 ## 安装发布版本
 
 推送符合 `v*` 格式的 Git tag 后，GitHub Actions 会构建签名的 x64 MSIX，并创建
-GitHub Release。下载 `SoundPort-v*-x64.zip` 后，请按照
-[安装说明](docs/INSTALL.md)安装项目自签名证书和应用。
+GitHub Release。普通用户只需下载并运行单文件
+`SoundPort-v*-x64-Setup.exe`；安装器会自动处理项目证书、Windows App Runtime
+依赖和 MSIX。ZIP 与独立 MSIX 仍保留给需要手动安装或排查问题的用户，详情见
+[安装说明](docs/INSTALL.md)。
 
 ## 项目结构
 
