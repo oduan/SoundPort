@@ -42,49 +42,95 @@ Uninstallable=no
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "{#PayloadDir}\SoundPort-{#ReleaseTag}-x64.msix"; DestDir: "{tmp}\SoundPort"; DestName: "SoundPort.msix"; Flags: ignoreversion
-Source: "{#PayloadDir}\SoundPort.cer"; DestDir: "{tmp}\SoundPort"; Flags: ignoreversion
-Source: "{#PayloadDir}\Install-SoundPort.ps1"; DestDir: "{tmp}\SoundPort"; Flags: ignoreversion
-Source: "{#PayloadDir}\Dependencies\*.msix"; DestDir: "{tmp}\SoundPort\Dependencies"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "{#PayloadDir}\SoundPort-{#ReleaseTag}-x64.msix"; DestDir: "{tmp}\SoundPort"; DestName: "SoundPort.msix"; Flags: dontcopy noencryption
+Source: "{#PayloadDir}\SoundPort.cer"; DestDir: "{tmp}\SoundPort"; Flags: dontcopy noencryption
+Source: "{#PayloadDir}\Install-SoundPort.ps1"; DestDir: "{tmp}\SoundPort"; Flags: dontcopy noencryption
+Source: "{#PayloadDir}\Dependencies\*.msix"; DestDir: "{tmp}\SoundPort\Dependencies"; Flags: dontcopy noencryption skipifsourcedoesntexist
 
 [Run]
 Filename: "explorer.exe"; Parameters: "shell:AppsFolder\{#AppAumid}"; Description: "{cm:LaunchProgram,SoundPort}"; Flags: postinstall nowait skipifsilent unchecked
 
 [Code]
-procedure CurStepChanged(CurStep: TSetupStep);
+function JoinOutputLines(const Lines: TArrayOfString): String;
+var
+  I: Integer;
+begin
+  Result := '';
+  for I := 0 to GetArrayLength(Lines) - 1 do
+  begin
+    if Result <> '' then
+      Result := Result + #13#10;
+    Result := Result + Lines[I];
+  end;
+
+  if Length(Result) > 4000 then
+    Result := Copy(Result, 1, 4000) + #13#10 + '（错误信息已截断）';
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   PowerShellPath: String;
   ScriptPath: String;
   Parameters: String;
+  ErrorDetails: String;
   ResultCode: Integer;
+  Output: TExecOutput;
 begin
-  if CurStep <> ssPostInstall then
-    Exit;
+  Result := '';
 
-  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
-  ScriptPath := ExpandConstant('{tmp}\SoundPort\Install-SoundPort.ps1');
-  Parameters :=
-    '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
-    ScriptPath + '" -PackagePath "' +
-    ExpandConstant('{tmp}\SoundPort\SoundPort.msix') + '"';
+  try
+    ExtractTemporaryFiles('{tmp}\SoundPort\SoundPort.msix');
+    ExtractTemporaryFiles('{tmp}\SoundPort\SoundPort.cer');
+    ExtractTemporaryFiles('{tmp}\SoundPort\Install-SoundPort.ps1');
 
-  WizardForm.StatusLabel.Caption := '正在安装 SoundPort 及其运行时依赖...';
+    try
+      ExtractTemporaryFiles('{tmp}\SoundPort\Dependencies\*.msix');
+    except
+      Log('No bundled dependency package was extracted: ' +
+        GetExceptionMessage);
+    end;
 
-  if not Exec(
-    PowerShellPath,
-    Parameters,
-    '',
-    SW_HIDE,
-    ewWaitUntilTerminated,
-    ResultCode) then
-  begin
-    RaiseException('无法启动 SoundPort 安装程序。');
-  end;
+    PowerShellPath :=
+      ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+    ScriptPath :=
+      ExpandConstant('{tmp}\SoundPort\Install-SoundPort.ps1');
+    Parameters :=
+      '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
+      ScriptPath + '" -PackagePath "' +
+      ExpandConstant('{tmp}\SoundPort\SoundPort.msix') + '"';
 
-  if ResultCode <> 0 then
-  begin
-    RaiseException(
-      'SoundPort 安装失败，PowerShell 退出代码：' +
-      IntToStr(ResultCode));
+    WizardForm.StatusLabel.Caption :=
+      '正在安装 SoundPort 及其运行时依赖...';
+
+    if not ExecAndCaptureOutput(
+      PowerShellPath,
+      Parameters,
+      '',
+      SW_SHOWNORMAL,
+      ewWaitUntilTerminated,
+      ResultCode,
+      Output) then
+    begin
+      Result :=
+        '无法启动 SoundPort 安装程序：' +
+        SysErrorMessage(ResultCode);
+      Exit;
+    end;
+
+    if ResultCode <> 0 then
+    begin
+      ErrorDetails := JoinOutputLines(Output.StdErr);
+      if ErrorDetails = '' then
+        ErrorDetails := JoinOutputLines(Output.StdOut);
+      if ErrorDetails = '' then
+        ErrorDetails := 'PowerShell 退出代码：' + IntToStr(ResultCode);
+
+      Result :=
+        'SoundPort 安装失败。' + #13#10 + #13#10 +
+        ErrorDetails;
+    end;
+  except
+    Result :=
+      '准备 SoundPort 安装文件失败：' + GetExceptionMessage;
   end;
 end;

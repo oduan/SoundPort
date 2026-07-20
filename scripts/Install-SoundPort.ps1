@@ -59,10 +59,15 @@ if (Test-Path -LiteralPath $dependencyDirectory) {
 }
 
 if ($dependencies.Count -gt 0) {
-    Add-AppxPackage -Path $resolvedPackage -DependencyPath $dependencies
+    Add-AppxPackage `
+        -Path $resolvedPackage `
+        -DependencyPath $dependencies `
+        -ForceApplicationShutdown
 }
 else {
-    Add-AppxPackage -Path $resolvedPackage
+    Add-AppxPackage `
+        -Path $resolvedPackage `
+        -ForceApplicationShutdown
 }
 
 Write-Host 'SoundPort was installed successfully.'
