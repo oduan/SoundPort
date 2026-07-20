@@ -62,6 +62,12 @@ public sealed partial class MainPage : Page
             ? Microsoft.UI.Xaml.Visibility.Visible
             : Microsoft.UI.Xaml.Visibility.Collapsed;
 
+        var isSearching = Receiver.State == ReceiverState.Searching;
+        SearchProgress.IsActive = isSearching;
+        SearchProgress.Visibility = isSearching
+            ? Microsoft.UI.Xaml.Visibility.Visible
+            : Microsoft.UI.Xaml.Visibility.Collapsed;
+
         StatusBar.Title = Receiver.State switch
         {
             ReceiverState.Searching => "正在搜索",

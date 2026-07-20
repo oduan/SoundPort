@@ -298,7 +298,16 @@ public sealed class AudioReceiverService : IAsyncDisposable
     {
         State = state;
         StatusMessage = message;
+        UpdateDeviceConnectionStates();
         StatusChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void UpdateDeviceConnectionStates()
+    {
+        foreach (var device in Devices)
+        {
+            device.IsConnected = State == ReceiverState.Connected && device.Id == _connectedDeviceId;
+        }
     }
 
     private void Enqueue(Action action)
